@@ -111,7 +111,8 @@ it stopped:
      path with a reload command,
    * for a Caddy host: 
      * a docker-compose service using
-     `ghcr.io/wrobelda/caddy-ovh` (Caddy with the `caddy-dns/ovh` module baked-in)
+     [`ghcr.io/wrobelda/caddy-ovh`](https://github.com/wrobelda/caddy-ovh-dns/pkgs/container/caddy-ovh)
+     (Caddy with the `caddy-dns/ovh` module baked-in)
      * the matching Caddyfile.
 
 7. After ~1 hour, the admin key's validity runs out.
