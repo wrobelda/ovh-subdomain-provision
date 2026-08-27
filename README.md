@@ -33,24 +33,28 @@ For each new subdomain the `new` command walks these steps, skipping any that
 are already done, so rerunning the same command after a failure resumes where
 it stopped:
 
-1. **Application key + secret** (first run only) — the script opens OVH's
-   `createApp` page in your browser, which you will need to log in to using
-   your OVH credentials; you then name the application (any name and
-   description will do). Once confirmed, OVH displays the key + secret pair,
-   which you paste back into the script input — the script then caches it in
-   `~/.config/ovh-subdomain-provision/`. This is the one manual copy-paste in the whole
-   flow, and since the pair does not expire, you will not need to repeat the
-   step.
-   NOTE: this key + secret has no power over your account: it only identifies
+1. **Application key + secret** (first run only):
+   * the script opens OVH's `createApp` page in your browser,
+   * you log in with your OVH credentials and name the application (any name
+     and description will do),
+   * OVH displays the key + secret pair, which you paste back into the script
+     input,
+   * the script caches the pair in `~/.config/ovh-subdomain-provision/`.
+
+   This is the one manual copy-paste in the whole flow, and since the pair
+   does not expire, you will not need to repeat the step.
+
+   **NOTE**: this key + secret has no power over your account: it only identifies
    this very script, and the one thing it enables is *requesting* consumer
    keys (see below), each of which you will need to independently validate in
    the browser using your OVH credentials.
-2. **Admin consumer key** — once the application key is provisioned, we need
-   an actual admin key that allows the script to order the zone and modify
-   the necessary records programmatically. The script requests one by opening
-   OVH's validation page in your browser. You log in with your OVH
-   credentials and review the requested API paths, which for
-   `subdomain.example.com` would look like this on the validation page:
+2. **Admin consumer key** — the actual key that lets the script order the
+   zone and modify the necessary records programmatically:
+   * the script requests the key and opens OVH's validation page in your
+     browser,
+   * you log in with your OVH credentials,
+   * you review the requested API paths, which for `subdomain.example.com`
+     look like this on the validation page:
 
    ```
    GET     /me                                            -> read account country, needed for the zone order
@@ -69,39 +73,52 @@ it stopped:
    POST    /domain/zone/example.com/refresh               -> publish the parent zone change
    ```
 
-   The key cannot touch any other zone on the account (for a deeper
+   * you pick a validity of 1 hour: the run spends 15–20 minutes waiting for
+     zone activation, and afterwards the key expires on its own,
+   * on confirmation the script notices the approval (it listens on
+     `127.0.0.1` for the post-approval redirect and polls the API) and
+     continues — the key already reached the script over the API, so there is
+     nothing to paste.
+
+   **NOTE**: the key cannot touch any other zone on the account; for a deeper
    subdomain, every possible parent suffix is listed, since the actual parent
-   is not known until the key can query the API). Pick a validity of 1 hour:
-   the run spends 15–20 minutes waiting for zone activation, and afterwards
-   the key simply expires on its own. As soon as you confirm, the script
-   notices the approval (it listens on `127.0.0.1` for the post-approval
-   redirect and polls the API) and continues; the key already reached the
-   script over the API, so there is nothing to paste.
-3. **Zone order** — the script orders a DNS zone for the subdomain (product
-   `dns`, plan `zone`), aborting if the checkout is not free, then polls
-   until the zone is active — OVH says 15–20 minutes is normal — and reads
-   its assigned nameservers. If the order is rejected because a previous run
-   already placed it, the script finds that order in the recent order history
-   and waits for its delivery instead, watching its status.
-4. **Delegation** — the script adds matching NS records to the parent zone
-   and refreshes it (the parent is detected automatically), then waits until
-   the delegation resolves in public DNS via DNS-over-HTTPS.
-5. **Per-host consumer key** — the script requests a second key and opens the
-   validation page again. This time the listed rules are limited to
-   `/domain/zone/<subzone>/…`, and you pick Validity: Unlimited, because
-   acme.sh or Caddy will use this key for every renewal. After your
-   confirmation the script verifies the key against the new zone.
-   NOTE: this key ends up only on the host it serves and can only edit
+   is not known until the key can query the API.
+3. **Zone order**:
+   * the script orders a DNS zone for the subdomain (product `dns`, plan
+     `zone`), aborting if the checkout is not free,
+   * if the order is rejected because a previous run already placed it, the
+     script finds that order in the recent order history and watches its
+     delivery instead,
+   * it polls until the zone is active — OVH says 15–20 minutes is normal —
+     and reads the assigned nameservers.
+4. **Delegation**:
+   * the script adds matching NS records to the parent zone (detected
+     automatically) and refreshes it,
+   * it waits until the delegation resolves in public DNS via
+     DNS-over-HTTPS.
+5. **Per-host consumer key**:
+   * the script requests a second key and opens the validation page again —
+     this time the listed rules are limited to `/domain/zone/<subzone>/…`,
+   * you pick Validity: Unlimited, because acme.sh or Caddy will use this key
+     for every renewal,
+   * after your confirmation the script verifies the key against the new
+     zone.
+
+   **NOTE**: this key ends up only on the host it serves and can only edit
    records inside that one subzone, so a compromised host cannot touch the
    parent zone or other subdomains.
 6. **Hand-off** — the script prints both output variants; use whichever the
-   host runs. For acme.sh: env exports with the zone-limited credentials, the
-   initial `acme.sh --issue --dns dns_ovh` call (acme.sh persists the
-   credentials for renewals), and a crontab line that resolves the full
-   acme.sh path and appends a renewal entry only if none exists. For a Caddy
-   host: a docker-compose service using `ghcr.io/wrobelda/caddy-ovh` (Caddy
-   with the `caddy-dns/ovh` module) plus the matching Caddyfile. Once the
-   admin key's hour runs out, the only things left are the powerless
+   host runs:
+   * for acme.sh: env exports with the zone-limited credentials, the initial
+     `acme.sh --issue --dns dns_ovh` call (acme.sh persists the credentials
+     for renewals), a crontab renewal entry with the full acme.sh path, and a
+     commented `--install-cert` template for copying the cert to a stable
+     path with a reload command,
+   * for a Caddy host: a docker-compose service using
+     `ghcr.io/wrobelda/caddy-ovh` (Caddy with the `caddy-dns/ovh` module)
+     plus the matching Caddyfile.
+
+   Once the admin key's hour runs out, the only things left are the powerless
    application pair on your machine and the subzone-limited key on the host.
 
 In total, a new subdomain costs two browser validations. The `status` command
