@@ -438,6 +438,7 @@ def order_zone(client, zone, template):
 def wait_for_zone(client, zone, order_id=None):
     deadline = time.time() + ZONE_WAIT_TIMEOUT
     log("⏳ waiting for the zone to become active (OVH says 15-20 min is normal)...")
+    stuck_since = None
     while time.time() < deadline:
         info = zone_exists(client, zone)
         if info:
@@ -448,11 +449,18 @@ def wait_for_zone(client, zone, order_id=None):
                 status = client.call("GET", f"/me/order/{order_id}/status")
             except ApiError:
                 status = None
+            # a fresh order shows notPaid briefly while the 0-cost payment is
+            # processed, so only a persistent bad status means it is stuck
             if status in ("notPaid", "documentsRequested"):
-                print()
-                raise ApiError(
-                    f"order #{order_id} is stuck in status '{status}'; resolve "
-                    "it in the OVH control panel, then rerun")
+                stuck_since = stuck_since or time.time()
+                if time.time() - stuck_since > 5 * 60:
+                    print()
+                    raise ApiError(
+                        f"order #{order_id} has been in status '{status}' for "
+                        "5 minutes; resolve it in the OVH control panel, then "
+                        "rerun")
+            else:
+                stuck_since = None
         print(".", end="", flush=True)
         time.sleep(20)
     print()
