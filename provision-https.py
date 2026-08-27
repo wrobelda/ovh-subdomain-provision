@@ -357,6 +357,22 @@ def issue_limited_key(client, zone):
                        "acme.sh/Caddy will use this key for every renewal"))
 
 
+def pick_zone_price(prices):
+    """Choose the offer price entry to order with: prefer one with the
+    'renew' capacity, and never one with an empty/zero duration (the
+    installation entry, which checkout rejects with 'Invalid duration 0')."""
+    def valid_duration(p):
+        return p.get("duration") not in (None, 0, "0", "P0D")
+    price = (next((p for p in prices
+                   if "renew" in (p.get("capacities") or []) and valid_duration(p)),
+                  None)
+             or next((p for p in prices if valid_duration(p)), None))
+    if price is None:
+        raise ApiError("no price entry with a usable duration in the zone offer "
+                       f"(got: {json.dumps(prices)[:400]})")
+    return price
+
+
 def find_pending_zone_order(client, zone):
     """Search the last two days of orders for one that delivers this zone."""
     since = time.strftime("%Y-%m-%dT%H:%M:%S+00:00",
@@ -403,18 +419,7 @@ def order_zone(client, zone, template):
     offer = next((o for o in offers if o.get("planCode") == "zone"), None)
     if offer is None:
         raise ApiError(f"no 'zone' plan offered in cart (got: {json.dumps(offers)[:300]})")
-    prices = offer.get("prices") or []
-
-    def valid_duration(p):
-        return p.get("duration") not in (None, 0, "0", "P0D")
-
-    price = (next((p for p in prices
-                   if "renew" in (p.get("capacities") or []) and valid_duration(p)),
-                  None)
-             or next((p for p in prices if valid_duration(p)), None))
-    if price is None:
-        raise ApiError("no price entry with a usable duration in the zone offer "
-                       f"(got: {json.dumps(prices)[:400]})")
+    price = pick_zone_price(offer.get("prices") or [])
     item = client.call("POST", f"/order/cart/{cart_id}/dns", {
         "planCode": "zone", "duration": price["duration"],
         "pricingMode": price["pricingMode"], "quantity": 1})
