@@ -523,7 +523,15 @@ ACME="$HOME/.acme.sh/acme.sh"; [ -x "$ACME" ] || ACME="$(command -v acme.sh)"
 
 # renewal cron entry with the full acme.sh path (skipped if one already exists)
 crontab -l 2>/dev/null | grep -q -- '--cron' || \\
-  ( crontab -l 2>/dev/null; echo "{cron_time} * * * $ACME --cron >/dev/null" ) | crontab -""")
+  ( crontab -l 2>/dev/null; echo "{cron_time} * * * $ACME --cron >/dev/null" ) | crontab -
+
+# copy the cert where your service reads it (do not point the service at
+# ~/.acme.sh -- its layout is internal to acme.sh); acme.sh re-runs this copy
+# and the reload command after every renewal. Adjust paths and reload command:
+# "$ACME" --install-cert -d {shlex.quote(zone)} --ecc \\
+#   --fullchain-file /etc/ssl/{zone}/fullchain.pem \\
+#   --key-file      /etc/ssl/{zone}/key.pem \\
+#   --reloadcmd     "rc-service nginx reload"   # or e.g.: podman restart <container>""")
 
 
 def print_caddy_snippet(zone, client, limited_ck):
