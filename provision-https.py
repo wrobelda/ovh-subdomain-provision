@@ -531,7 +531,10 @@ crontab -l 2>/dev/null | grep -q -- '--cron' || \\
 # "$ACME" --install-cert -d {shlex.quote(zone)} --ecc \\
 #   --fullchain-file /etc/ssl/{zone}/fullchain.pem \\
 #   --key-file      /etc/ssl/{zone}/key.pem \\
-#   --reloadcmd     "rc-service nginx reload"   # or e.g.: podman restart <container>""")
+#   --reloadcmd     "rc-service nginx reload"
+# most apps only read the cert at startup; if yours has no graceful reload,
+# use e.g. "podman restart <container>" -- a brief downtime at each ~60-day
+# renewal""")
 
 
 def print_caddy_snippet(zone, client, limited_ck):
