@@ -11,8 +11,7 @@ that needs its own certificate. For each `subdomain` it:
   `subdomain` and not the parent domain or any other `subdomain` on your account;
 - delegates the new zone from the parent zone by adding NS (nameserver) records there;
 - issues an OVH consumer key limited to that zone only;
-- prints the commands to paste on the target host, both as an acme.sh block
-  and as a Caddy snippet — use whichever the host runs.
+- prints the convenience commands to use on the target host: for acme.sh and for Caddy.
 
 Every step is idempotent, so rerunning the same command after a failure
 resumes where it stopped.
@@ -80,29 +79,28 @@ it stopped:
 
 3. **Zone order**:
    * the script orders a DNS zone (`/domain/zone/<subzone>`) for the `subdomain.example.com`.
-      * aborting if the checkout is not free,
+      * aborting if the checkout is not free (if OVH ever starts charging for that)
       * if the order is rejected because a previous run already placed it, the
      script finds that order in the recent order history and monitors its
      delivery instead,
    * it polls until the zone is active — OVH says 1–20 minutes is normal
-   * once ready, it reads the assigned nameservers,
+   * once ready, it reads the NS records for the assigned nameservers,
    * and continues to the next stage.
 4. **DNS Delegation**:
-   * the script adds the `subdomain`'s NS records to the parent zone,
-   * it waits until the DNS delegation resolves in public DNS via
+   * the script adds the `subdomain`'s NS records to the parent domain's DNS zone,
+   * it waits until the DNS delegation resolves in public DNS using
      DNS-over-HTTPS service,
    * continues to the next stage.
 5. **Per-host consumer key generation**: final stage
    * the script opens the validation page again —
-     this time to issue the actual keys needed by acme.sh tool
+     this time to issue the actual keys needed by LetsEncrypt tool of choice (e.g. acme.sh or Caddy)
       * keys are limited to `/domain/zone/<subzone>/…`, i.e. they can only change the `subdomain.example.com` DNS settings.
-   * you pick Validity: Unlimited, because acme.sh or Caddy will use this key
-     for every renewal,
+   * you pick Validity: `Unlimited`, because acme.sh or Caddy will use this key
+     for every renewal (unless you want to intentionally limit it)
    * script detects your approval automatically, no need to paste keys
    * script verifies the issued key works against the new `subzone`.
 
-6. **Hand-off** — the script prints both output variants; use whichever the
-   host runs:
+6. **Hand-off** — the script prints suggested config for two LetsEncrypt tools:
    * for acme.sh:
      *  env exports with the required credentials
      *  the initial
@@ -113,7 +111,7 @@ it stopped:
      path with a reload command,
    * for a Caddy host: 
      * a docker-compose service using
-     `ghcr.io/wrobelda/caddy-ovh` (Caddy with the `caddy-dns/ovh` module)
+     `ghcr.io/wrobelda/caddy-ovh` (Caddy with the `caddy-dns/ovh` module baked-in)
      * the matching Caddyfile.
 
 7. After ~1 hour, the admin key's validity runs out.
