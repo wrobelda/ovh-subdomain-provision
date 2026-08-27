@@ -54,6 +54,8 @@ it stopped:
 
    ```
    GET     /me                                            -> read account country, needed for the zone order
+   GET     /me/order                                      -> list recent orders, only used if placing the order fails
+   GET     /me/order/*                                    -> find the already-placed zone order, track its delivery
    POST    /order/cart                                    -> create an order cart
    GET     /order/cart/*                                  -> read the zone offer, verify the order costs 0 before checkout
    POST    /order/cart/*                                  -> order the new DNS zone
@@ -78,7 +80,9 @@ it stopped:
 3. **Zone order** — the script orders a DNS zone for the subdomain (product
    `dns`, plan `zone`), aborting if the checkout is not free, then polls
    until the zone is active — OVH says 15–20 minutes is normal — and reads
-   its assigned nameservers.
+   its assigned nameservers. If the order is rejected because a previous run
+   already placed it, the script finds that order in the recent order history
+   and waits for its delivery instead, watching its status.
 4. **Delegation** — the script adds matching NS records to the parent zone
    and refreshes it (the parent is detected automatically), then waits until
    the delegation resolves in public DNS via DNS-over-HTTPS.

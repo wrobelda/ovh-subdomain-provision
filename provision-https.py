@@ -149,22 +149,19 @@ def parent_candidates(fqdn):
     return [".".join(labels[i:]) for i in range(1, len(labels) - 1)]
 
 
-def run_rules(zone, pending_order_id=None):
+def run_rules(zone):
     """Admin rules for one `new` run: order zones, edit the target subzone,
     and add/read delegation records in whichever candidate is the parent."""
-    r = []
-    if pending_order_id:
-        r += rules(
-            "pending order (from an interrupted run)",
-            ("GET", f"/me/order/{pending_order_id}/status",
-             "check whether the earlier zone order is still being delivered"),
-        )
-    r += rules(
+    r = rules(
         "account",
         ("GET", "/me",
          "read account country, needed for the zone order"),
     ) + rules(
         "zone order",
+        ("GET", "/me/order",
+         "list recent orders -- only used if placing the order fails"),
+        ("GET", "/me/order/*",
+         "find the already-placed zone order and track its delivery status"),
         ("POST", "/order/cart",
          "create an order cart"),
         ("GET", "/order/cart/*",
@@ -360,6 +357,26 @@ def issue_limited_key(client, zone):
                        "acme.sh/Caddy will use this key for every renewal"))
 
 
+def find_pending_zone_order(client, zone):
+    """Search the last two days of orders for one that delivers this zone."""
+    since = time.strftime("%Y-%m-%dT%H:%M:%S+00:00",
+                          time.gmtime(time.time() - 2 * 86400))
+    q = urllib.parse.urlencode({"date.from": since})
+    try:
+        order_ids = client.call("GET", f"/me/order?{q}") or []
+    except ApiError:
+        return None
+    for oid in sorted(order_ids, reverse=True)[:20]:
+        try:
+            for did in client.call("GET", f"/me/order/{oid}/details") or []:
+                detail = client.call("GET", f"/me/order/{oid}/details/{did}")
+                if zone in f"{detail.get('domain', '')} {detail.get('description', '')}":
+                    return oid
+        except ApiError:
+            continue
+    return None
+
+
 def zone_exists(client, zone):
     try:
         return client.call("GET", f"/domain/zone/{zone}")
@@ -435,8 +452,7 @@ def wait_for_zone(client, zone, order_id=None):
                 print()
                 raise ApiError(
                     f"order #{order_id} is stuck in status '{status}'; resolve "
-                    "it in the OVH control panel, then delete the pending-order "
-                    "marker and rerun")
+                    "it in the OVH control panel, then rerun")
         print(".", end="", flush=True)
         time.sleep(20)
     print()
@@ -587,11 +603,8 @@ def cmd_new(args):
     if not parent_candidates(zone):
         raise ApiError(f"{zone} is not a subdomain of anything; "
                        "pass a FQDN like subdomain.example.com")
-    pending = CACHE_DIR / f"pending-order.{zone}"
-    pending_id = pending.read_text().strip() if pending.exists() else None
-
     client = make_run_client(
-        args, run_rules(zone, pending_id), "run-admin",
+        args, run_rules(zone), "run-admin",
         validity_hint=("1 hour",
                        "the run waits 15-20 minutes for zone activation; "
                        "the key expires on its own afterwards"))
@@ -602,16 +615,17 @@ def cmd_new(args):
     if info:
         log(f"✓ zone {zone} already exists, skipping order")
     else:
-        if pending_id:
-            log(f"✓ zone order already placed by a previous run "
-                f"(order #{pending_id}), waiting for delivery")
-            log(f"  (if that order failed, delete {pending} and rerun)")
-        else:
+        try:
             order_id = order_zone(client, zone, args.template)
-            cache_write(pending, f"{order_id}\n")
-        info = wait_for_zone(client, zone, order_id=pending_id)
+        except ApiError as e:
+            log(f"⚠ zone order failed ({e})")
+            order_id = find_pending_zone_order(client, zone)
+            if order_id is None:
+                raise
+            log(f"✓ found an existing order #{order_id} for {zone}, "
+                "waiting for its delivery instead")
+        info = wait_for_zone(client, zone, order_id=order_id)
         log(f"✓ zone {zone} is active")
-    pending.unlink(missing_ok=True)
 
     nameservers = zone_nameservers(client, zone, info)
     log(f"assigned nameservers: {', '.join(nameservers)}")
