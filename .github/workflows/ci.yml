@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly, to catch OVH API schema drift
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile
+        run: python3 -m py_compile provision-https.py
+
+      - name: Unit tests
+        run: python3 -m unittest test_provision -v
+
+      - name: OVH API schema validation
+        run: OVH_SCHEMA_TESTS=1 python3 -m unittest test_provision.ApiSchemaTest -v

@@ -6,6 +6,9 @@ Run with: python3 -m unittest test_provision -v
 
 import importlib.util
 import io
+import json
+import os
+import re
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -176,6 +179,64 @@ class OutputTest(unittest.TestCase):
         self.assertIn("ghcr.io/wrobelda/caddy-ovh:latest", block)
         self.assertIn("tool.example.com {", block)
         self.assertIn("OVH_CONSUMER_KEY: CK", block)
+
+
+@unittest.skipUnless(os.environ.get("OVH_SCHEMA_TESTS"),
+                     "network test; set OVH_SCHEMA_TESTS=1 to run")
+class ApiSchemaTest(unittest.TestCase):
+    """Validate every endpoint the script calls against OVH's published API
+    schema (https://eu.api.ovh.com/1.0/{section}.json)."""
+
+    BASE = "https://eu.api.ovh.com/1.0"
+
+    # (method, concrete path) for every client.call() the script can make
+    USED_ENDPOINTS = [
+        ("POST", "/auth/credential"),
+        ("GET", "/me"),
+        ("GET", "/me/order"),
+        ("GET", "/me/order/1/details"),
+        ("GET", "/me/order/1/details/2"),
+        ("GET", "/me/order/1/status"),
+        ("POST", "/order/cart"),
+        ("POST", "/order/cart/abc/assign"),
+        ("GET", "/order/cart/abc/dns"),
+        ("POST", "/order/cart/abc/dns"),
+        ("POST", "/order/cart/abc/item/1/configuration"),
+        ("GET", "/order/cart/abc/checkout"),
+        ("POST", "/order/cart/abc/checkout"),
+        ("GET", "/domain/zone/z.example.com"),
+        ("GET", "/domain/zone/z.example.com/record"),
+        ("GET", "/domain/zone/z.example.com/record/1"),
+        ("POST", "/domain/zone/z.example.com/record"),
+        ("POST", "/domain/zone/z.example.com/refresh"),
+        ("DELETE", "/domain/zone/z.example.com/record/1"),
+    ]
+
+    @classmethod
+    def setUpClass(cls):
+        import urllib.request
+
+        def fetch(url):
+            with urllib.request.urlopen(url, timeout=30) as r:
+                return json.loads(r.read().decode())
+
+        cls.templates = {}  # (method, compiled-regex) -> template path
+        for section in ("auth", "me", "order", "domain"):
+            schema = fetch(f"{cls.BASE}/{section}.json")
+            for api in schema.get("apis", []):
+                pattern = re.compile(
+                    "^" + re.sub(r"\{[^}]+\}", "[^/]+", api["path"]) + "$")
+                for op in api.get("operations", []):
+                    cls.templates.setdefault(
+                        op["httpMethod"], []).append((pattern, api["path"]))
+
+    def test_every_used_endpoint_exists_in_the_schema(self):
+        for method, path in self.USED_ENDPOINTS:
+            with self.subTest(f"{method} {path}"):
+                matches = [t for (rx, t) in self.templates.get(method, [])
+                           if rx.match(path)]
+                self.assertTrue(matches,
+                                f"{method} {path} not found in OVH schema")
 
 
 if __name__ == "__main__":
