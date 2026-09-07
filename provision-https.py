@@ -545,11 +545,11 @@ export OVH_END_POINT={client.endpoint}
 export OVH_AK={shlex.quote(client.app_key)}
 export OVH_AS={shlex.quote(client.app_secret)}
 export OVH_CK={shlex.quote(limited_ck)}
+export ACME="$HOME/.acme.sh/acme.sh"; [ -x "$ACME" ] || export ACME="$(command -v acme.sh)"
 
 # initial issue; acme.sh stores the OVH credentials for future renewals
 
 # - only {zone}:
-ACME="$HOME/.acme.sh/acme.sh"; [ -x "$ACME" ] || ACME="$(command -v acme.sh)"
 "$ACME" --issue -d {shlex.quote(zone)} --dns dns_ovh --server {server}
 
 # - if the host also serves names under {zone}, append additional -d '*.{zone}':
