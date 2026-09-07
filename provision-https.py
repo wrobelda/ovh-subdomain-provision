@@ -557,10 +557,11 @@ export ACME="$HOME/.acme.sh/acme.sh"; [ -x "$ACME" ] || export ACME="$(command -
 
 # - copy the cert where your service reads it (do not point the service at
 #   ~/.acme.sh -- its layout is internal to acme.sh); acme.sh re-runs this copy
-#   and the reload command after every renewal. Adjust paths and reload command:
+#   and the reload command after every renewal. Adjust the reload command:
+export CERT_DIR=/etc/ssl/{zone}
 "$ACME" --install-cert -d {shlex.quote(zone)} --ecc \\
-  --fullchain-file /etc/ssl/{zone}/fullchain.pem \\
-  --key-file      /etc/ssl/{zone}/key.pem \\
+  --fullchain-file "$CERT_DIR"/{zone}.fullchain.pem \\
+  --key-file      "$CERT_DIR"/{zone}.key.pem \\
   --reloadcmd     "rc-service nginx reload"
 #   most apps only read the cert at startup; if yours has no graceful reload,
 #   use e.g. "podman restart <container>" -- a brief downtime at each ~60-day
