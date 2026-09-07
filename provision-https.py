@@ -555,17 +555,17 @@ export ACME="$HOME/.acme.sh/acme.sh"; [ -x "$ACME" ] || export ACME="$(command -
 # - if the host also serves names under {zone}, append additional -d '*.{zone}':
 "$ACME" --issue -d {shlex.quote(zone)} -d {shlex.quote("*." + zone)} --dns dns_ovh --server {server}
 
-# - copy the cert where your service reads it (do not point the service at
-#   ~/.acme.sh -- its layout is internal to acme.sh); acme.sh re-runs this copy
-#   and the reload command after every renewal. Adjust the reload command:
+# then, optionally:
+# - copy the cert using --install-cert; advised, since pointing a service
+#   directly at the files under ~/.acme.sh is discouraged by acme.sh
+# - run a command via --reloadcmd, e.g. to restart the web server, since most
+#   apps only read the cert at startup
+# acme.sh remembers these options and repeats them after every renewal
 export CERT_DIR=/etc/ssl/{zone}
 "$ACME" --install-cert -d {shlex.quote(zone)} --ecc \\
   --fullchain-file "$CERT_DIR"/{zone}.fullchain.pem \\
   --key-file      "$CERT_DIR"/{zone}.key.pem \\
   --reloadcmd     "rc-service nginx reload"
-#   most apps only read the cert at startup; if yours has no graceful reload,
-#   use e.g. "podman restart <container>" -- a brief downtime at each ~60-day
-#   renewal
 
 # renewal cron entry; acme.sh installs its own (skipped if one already exists)
 "$ACME" --install-cronjob
