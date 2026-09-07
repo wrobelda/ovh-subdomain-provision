@@ -159,7 +159,7 @@ class OutputTest(unittest.TestCase):
         for _ in range(50):
             line = next(l for l in self._host_block().splitlines()
                         if "--cron >" in l)
-            minute, hour = line.split('echo "')[1].split()[:2]
+            minute, hour = line.lstrip("# ").split()[:2]
             self.assertIn(int(minute), range(60))
             self.assertIn(int(hour), range(24))
 

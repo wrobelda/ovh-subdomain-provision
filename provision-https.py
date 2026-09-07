@@ -567,9 +567,10 @@ export CERT_DIR=/etc/ssl/{zone}
 #   use e.g. "podman restart <container>" -- a brief downtime at each ~60-day
 #   renewal
 
-# renewal cron entry with the full acme.sh path (skipped if one already exists)
-crontab -l 2>/dev/null | grep -q -- '--cron' || \\
-  ( crontab -l 2>/dev/null; echo "{cron_time} * * * $ACME --cron >/dev/null" ) | crontab -""")
+# renewal cron entry; acme.sh installs its own (skipped if one already exists)
+"$ACME" --install-cronjob
+# if that did not work, add this line to the crontab by hand:
+# {cron_time} * * * $ACME --cron >/dev/null""")
 
 
 def print_caddy_snippet(zone, client, limited_ck):
